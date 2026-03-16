@@ -81,18 +81,29 @@ class DynamoDBService:
             logger.error("get_order error: %s", e)
             return None
 
-    def bulk_load_orders(self, orders: list[dict]) -> int:
-        if not self.orders_table:
-            raise RuntimeError("DynamoDB not available")
+    from decimal import Decimal
+import json
 
-        count = 0
-        with self.orders_table.batch_writer() as batch:
-            for order in orders:
-                clean_order = convert_floats(order)
-                batch.put_item(Item=clean_order)
-                count += 1
-        logger.info("Bulk loaded %d orders", count)
-        return count
+def bulk_load_orders(self, orders: list[dict]) -> int:
+    if not self.orders_table:
+        raise RuntimeError("DynamoDB not available")
+
+    count = 0
+
+    with self.orders_table.batch_writer() as batch:
+        for order in orders:
+
+            # Convert ALL floats to Decimal safely
+            clean_order = json.loads(
+                json.dumps(order),
+                parse_float=Decimal
+            )
+
+            batch.put_item(Item=clean_order)
+            count += 1
+
+    logger.info("Bulk loaded %d orders", count)
+    return count
 
     # ── Products ─────────────────────────────────────────────────────────────
 
