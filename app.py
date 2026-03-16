@@ -222,15 +222,19 @@ def analyze_image():
         return jsonify({"error": str(e)}), 500
 
 
+from decimal import Decimal
+
 @app.route("/api/load-sample-data", methods=["POST"])
 @login_required
 def load_sample_data():
+    """Load sample_orders.json into DynamoDB (dev/demo only)."""
     sample_file = os.path.join(os.path.dirname(__file__), "data", "sample_orders.json")
+
     if not os.path.exists(sample_file):
         return jsonify({"error": "Sample data file not found"}), 404
 
     with open(sample_file) as f:
-        orders = json.load(f)
+        orders = json.load(f, parse_float=Decimal)
 
     try:
         count = dynamodb.bulk_load_orders(orders)
