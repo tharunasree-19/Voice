@@ -5,8 +5,8 @@ DynamoDB Service – orders, products, customers tables
 from __future__ import annotations
 import logging
 import os
+from decimal import Decimal
 import boto3
-from boto3.dynamodb.conditions import Key, Attr
 from botocore.exceptions import ClientError, NoCredentialsError
 
 logger = logging.getLogger(__name__)
@@ -17,17 +17,33 @@ CUSTOMERS_TABLE = os.environ.get("DYNAMODB_CUSTOMERS_TABLE", "ecommerce_customer
 REGION          = os.environ.get("AWS_REGION", "us-east-1")
 
 
+def convert_floats(obj):
+    """Recursively convert all floats to Decimal for DynamoDB"""
+    if isinstance(obj, float):
+        return Decimal(str(obj))
+    if isinstance(obj, int):
+        return Decimal(str(obj))
+    if isinstance(obj, dict):
+        return {k: convert_floats(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [convert_floats(i) for i in obj]
+    return obj
+
+
 class DynamoDBService:
     def __init__(self):
         try:
-            self.dynamodb = boto3.resource("dynamodb", region_name=REGION)
-            self.orders_table    = self.dynamodb.Table(ORDERS_TABLE)
-            self.products_table  = self.dynamodb.Table(PRODUCTS_TABLE)
+            self.dynamodb       = boto3.resource("dynamodb", region_name=REGION)
+            self.orders_table   = self.dynamodb.Table(ORDERS_TABLE)
+            self.products_table = self.dynamodb.Table(PRODUCTS_TABLE)
             self.customers_table = self.dynamodb.Table(CUSTOMERS_TABLE)
             logger.info("DynamoDB connected (region=%s)", REGION)
         except (NoCredentialsError, Exception) as e:
             logger.warning("DynamoDB init error: %s", e)
-            self.dynamodb = self.orders_table = self.products_table = self.customers_table = None
+            self.dynamodb        = None
+            self.orders_table    = None
+            self.products_table  = None
+            self.customers_table = None
 
     # ── Orders ────────────────────────────────────────────────────────────────
 
@@ -37,15 +53,17 @@ class DynamoDBService:
         response = self.orders_table.scan()
         items    = response.get("Items", [])
         while "LastEvaluatedKey" in response:
-            response = self.orders_table.scan(ExclusiveStartKey=response["LastEvaluatedKey"])
-            items   += response.get("Items", [])
+            response = self.orders_table.scan(
+                ExclusiveStartKey=response["LastEvaluatedKey"]
+            )
+            items += response.get("Items", [])
         return items
 
     def put_order(self, order: dict) -> bool:
         if not self.orders_table:
             return False
         try:
-            self.orders_table.put_item(Item=order)
+            self.orders_table.put_item(Item=convert_floats(order))
             return True
         except ClientError as e:
             logger.error("put_order error: %s", e)
@@ -61,27 +79,18 @@ class DynamoDBService:
             logger.error("get_order error: %s", e)
             return None
 
-   def bulk_load_orders(self, orders: list[dict]) -> int:
-    if not self.orders_table:
-        raise RuntimeError("DynamoDB not available")
-    
-    from decimal import Decimal
-    
-    def convert(obj):
-        if isinstance(obj, float):
-            return Decimal(str(obj))
-        if isinstance(obj, dict):
-            return {k: convert(v) for k, v in obj.items()}
-        if isinstance(obj, list):
-            return [convert(i) for i in obj]
-        return obj
-    
-    count = 0
-    with self.orders_table.batch_writer() as batch:
-        for order in orders:
-            batch.put_item(Item=convert(order))
-            count += 1
-    return count
+    def bulk_load_orders(self, orders: list[dict]) -> int:
+        if not self.orders_table:
+            raise RuntimeError("DynamoDB not available")
+
+        count = 0
+        with self.orders_table.batch_writer() as batch:
+            for order in orders:
+                clean_order = convert_floats(order)
+                batch.put_item(Item=clean_order)
+                count += 1
+        logger.info("Bulk loaded %d orders", count)
+        return count
 
     # ── Products ─────────────────────────────────────────────────────────────
 
@@ -94,13 +103,13 @@ class DynamoDBService:
         if not self.products_table:
             return False
         try:
-            self.products_table.put_item(Item=product)
+            self.products_table.put_item(Item=convert_floats(product))
             return True
         except ClientError as e:
             logger.error("put_product error: %s", e)
             return False
 
-    # ── Table provisioning (called from deployment scripts) ──────────────────
+    # ── Table Creation ────────────────────────────────────────────────────────
 
     @staticmethod
     def create_tables(region: str = REGION):
@@ -109,25 +118,40 @@ class DynamoDBService:
         tables = [
             {
                 "TableName": ORDERS_TABLE,
-                "KeySchema": [{"AttributeName": "order_id", "KeyType": "HASH"}],
-                "AttributeDefinitions": [{"AttributeName": "order_id", "AttributeType": "S"}],
+                "KeySchema": [
+                    {"AttributeName": "order_id", "KeyType": "HASH"}
+                ],
+                "AttributeDefinitions": [
+                    {"AttributeName": "order_id", "AttributeType": "S"}
+                ],
                 "BillingMode": "PAY_PER_REQUEST",
             },
             {
                 "TableName": PRODUCTS_TABLE,
-                "KeySchema": [{"AttributeName": "product_id", "KeyType": "HASH"}],
-                "AttributeDefinitions": [{"AttributeName": "product_id", "AttributeType": "S"}],
+                "KeySchema": [
+                    {"AttributeName": "product_id", "KeyType": "HASH"}
+                ],
+                "AttributeDefinitions": [
+                    {"AttributeName": "product_id", "AttributeType": "S"}
+                ],
                 "BillingMode": "PAY_PER_REQUEST",
             },
             {
                 "TableName": CUSTOMERS_TABLE,
-                "KeySchema": [{"AttributeName": "customer_id", "KeyType": "HASH"}],
-                "AttributeDefinitions": [{"AttributeName": "customer_id", "AttributeType": "S"}],
+                "KeySchema": [
+                    {"AttributeName": "customer_id", "KeyType": "HASH"}
+                ],
+                "AttributeDefinitions": [
+                    {"AttributeName": "customer_id", "AttributeType": "S"}
+                ],
                 "BillingMode": "PAY_PER_REQUEST",
             },
         ]
 
-        existing = {t["TableName"] for t in client.list_tables().get("TableNames", [])}
+        existing = {
+            t for t in client.list_tables().get("TableNames", [])
+        }
+
         for tdef in tables:
             if tdef["TableName"] not in existing:
                 client.create_table(**tdef)
