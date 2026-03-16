@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reports – Voice Analytics</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body class="app-body">
+
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-brand">
+      <svg viewBox="0 0 40 40" fill="none"><circle cx="20" cy="20" r="18" stroke="#10b981" stroke-width="2"/><path d="M10 28 L15 18 L20 22 L25 12 L30 20" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/><circle cx="20" cy="20" r="3" fill="#10b981"/></svg>
+      <span>VoiceAnalytics</span>
+    </div>
+    <ul class="nav-links">
+      <li><a href="/dashboard">📊 Dashboard</a></li>
+      <li class="active"><a href="/reports">📄 Reports</a></li>
+      <li><a href="/logout">🚪 Logout</a></li>
+    </ul>
+    <div class="sidebar-footer">
+      <span class="user-chip">{{ role | upper }}</span>
+      <span class="user-name">{{ user }}</span>
+    </div>
+  </nav>
+
+  <!-- Main -->
+  <main class="main-content">
+    <header class="page-header">
+      <div>
+        <h1 class="page-title">Analytics Reports</h1>
+        <p class="page-sub">Reports stored in Amazon S3</p>
+      </div>
+      <div class="header-actions">
+        <button class="btn-primary" onclick="window.location='/dashboard'">← Back to Dashboard</button>
+      </div>
+    </header>
+
+    <!-- AWS Architecture Banner -->
+    <section class="arch-banner">
+      <h3>☁ AWS Architecture</h3>
+      <div class="arch-flow">
+        <div class="arch-node">🖥 EC2<span>Flask App</span></div>
+        <span class="arch-arrow">→</span>
+        <div class="arch-node">🗄 DynamoDB<span>Order Data</span></div>
+        <span class="arch-arrow">→</span>
+        <div class="arch-node">⚙ Lambda<span>Processing</span></div>
+        <span class="arch-arrow">→</span>
+        <div class="arch-node">🪣 S3<span>Reports</span></div>
+        <span class="arch-arrow">→</span>
+        <div class="arch-node">📧 SES<span>Email</span></div>
+      </div>
+      <div class="arch-flow" style="margin-top:12px">
+        <div class="arch-node">🎙 Polly<span>TTS</span></div>
+        <span class="arch-arrow">→</span>
+        <div class="arch-node">🔍 Rekognition<span>Images</span></div>
+        <span class="arch-arrow">→</span>
+        <div class="arch-node">📬 SQS<span>Queue</span></div>
+        <span class="arch-arrow">→</span>
+        <div class="arch-node">⏰ EventBridge<span>Scheduler</span></div>
+        <span class="arch-arrow">→</span>
+        <div class="arch-node">🔐 IAM<span>Permissions</span></div>
+      </div>
+    </section>
+
+    <!-- Reports Table -->
+    <section class="reports-section">
+      <h2>Stored Reports</h2>
+      {% if reports %}
+      <div class="table-wrap">
+        <table class="reports-table">
+          <thead>
+            <tr>
+              <th>Report Name</th>
+              <th>Type</th>
+              <th>Last Modified</th>
+              <th>Size</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for report in reports %}
+            <tr>
+              <td class="report-name">📄 {{ report.name }}</td>
+              <td>
+                <span class="badge-type {% if 'daily' in report.name %}badge-daily{% elif 'monthly' in report.name %}badge-monthly{% else %}badge-weekly{% endif %}">
+                  {% if 'daily' in report.name %}Daily
+                  {% elif 'monthly' in report.name %}Monthly
+                  {% else %}Weekly{% endif %}
+                </span>
+              </td>
+              <td>{{ report.last_modified[:19].replace('T',' ') }}</td>
+              <td>{{ (report.size / 1024)|round(1) }} KB</td>
+              <td>
+                <a href="{{ report.url }}" target="_blank" class="btn-dl">⬇ Download</a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <p>🗂 No reports found in S3 yet.</p>
+        <p>Go to the <a href="/dashboard">Dashboard</a> and click <strong>Generate Report</strong> to create one.</p>
+      </div>
+      {% endif %}
+    </section>
+
+    <!-- AWS Services Status -->
+    <section class="services-grid">
+      <h2>AWS Services Status</h2>
+      <div class="service-cards">
+        <div class="svc-card"><span class="svc-icon">🖥</span><span class="svc-name">Amazon EC2</span><span class="svc-status online">Hosting Flask</span></div>
+        <div class="svc-card"><span class="svc-icon">🗄</span><span class="svc-name">DynamoDB</span><span class="svc-status online">Orders DB</span></div>
+        <div class="svc-card"><span class="svc-icon">⚙</span><span class="svc-name">Lambda</span><span class="svc-status online">Analytics</span></div>
+        <div class="svc-card"><span class="svc-icon">🎙</span><span class="svc-name">Amazon Polly</span><span class="svc-status online">TTS Ready</span></div>
+        <div class="svc-card"><span class="svc-icon">🔍</span><span class="svc-name">Rekognition</span><span class="svc-status online">Image AI</span></div>
+        <div class="svc-card"><span class="svc-icon">🪣</span><span class="svc-name">Amazon S3</span><span class="svc-status online">Reports</span></div>
+        <div class="svc-card"><span class="svc-icon">📬</span><span class="svc-name">Amazon SQS</span><span class="svc-status online">Queue</span></div>
+        <div class="svc-card"><span class="svc-icon">⏰</span><span class="svc-name">EventBridge</span><span class="svc-status online">Scheduled</span></div>
+        <div class="svc-card"><span class="svc-icon">📧</span><span class="svc-name">Amazon SES</span><span class="svc-status online">Email</span></div>
+        <div class="svc-card"><span class="svc-icon">🔐</span><span class="svc-name">IAM</span><span class="svc-status online">Roles OK</span></div>
+      </div>
+    </section>
+
+  </main>
+</body>
+</html>
