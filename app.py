@@ -228,21 +228,38 @@ from decimal import Decimal
 @login_required
 def load_sample_data():
     """Load sample_orders.json into DynamoDB (dev/demo only)."""
+
     sample_file = os.path.join(os.path.dirname(__file__), "data", "sample_orders.json")
 
     if not os.path.exists(sample_file):
         return jsonify({"error": "Sample data file not found"}), 404
 
+    # Convert floats to Decimal while loading JSON
     with open(sample_file) as f:
         orders = json.load(f, parse_float=Decimal)
 
+    # Extra safety conversion
+    def convert_numbers(obj):
+        if isinstance(obj, float):
+            return Decimal(str(obj))
+        elif isinstance(obj, dict):
+            return {k: convert_numbers(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [convert_numbers(i) for i in obj]
+        return obj
+
     try:
-        count = dynamodb.bulk_load_orders(orders)
-        return jsonify({"success": True, "loaded": count})
+        cleaned_orders = [convert_numbers(order) for order in orders]
+        count = dynamodb.bulk_load_orders(cleaned_orders)
+
+        return jsonify({
+            "success": True,
+            "loaded": count
+        })
+
     except Exception as e:
         logger.error("Data load error: %s", e)
         return jsonify({"error": str(e)}), 500
-
 # ─── Error Handlers ───────────────────────────────────────────────────────────
 
 @app.errorhandler(404)
