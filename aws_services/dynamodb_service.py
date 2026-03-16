@@ -18,15 +18,17 @@ REGION          = os.environ.get("AWS_REGION", "us-east-1")
 
 
 def convert_floats(obj):
-    """Recursively convert all floats to Decimal for DynamoDB"""
+    """Recursively convert floats to Decimal for DynamoDB"""
+
     if isinstance(obj, float):
         return Decimal(str(obj))
-    if isinstance(obj, int):
-        return Decimal(str(obj))
+
     if isinstance(obj, dict):
         return {k: convert_floats(v) for k, v in obj.items()}
+
     if isinstance(obj, list):
         return [convert_floats(i) for i in obj]
+
     return obj
 
 
