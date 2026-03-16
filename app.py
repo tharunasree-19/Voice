@@ -225,8 +225,6 @@ def analyze_image():
 @app.route("/api/load-sample-data", methods=["POST"])
 @login_required
 def load_sample_data():
-    from decimal import Decimal
-
     sample_file = os.path.join(os.path.dirname(__file__), "data", "sample_orders.json")
     if not os.path.exists(sample_file):
         return jsonify({"error": "Sample data file not found"}), 404
@@ -234,17 +232,8 @@ def load_sample_data():
     with open(sample_file) as f:
         orders = json.load(f)
 
-    def convert(obj):
-        if isinstance(obj, float):
-            return Decimal(str(obj))
-        if isinstance(obj, dict):
-            return {k: convert(v) for k, v in obj.items()}
-        if isinstance(obj, list):
-            return [convert(i) for i in obj]
-        return obj
-
     try:
-        count = dynamodb.bulk_load_orders([convert(o) for o in orders])
+        count = dynamodb.bulk_load_orders(orders)
         return jsonify({"success": True, "loaded": count})
     except Exception as e:
         logger.error("Data load error: %s", e)
